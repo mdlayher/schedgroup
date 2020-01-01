@@ -16,6 +16,7 @@ package schedgroup_test
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -170,6 +171,75 @@ func TestGroupScheduledTasksDeadlineExceeded(t *testing.T) {
 	if err := sg.Wait(); err != context.DeadlineExceeded {
 		t.Fatalf("expected deadline exceeded, but got: %v", err)
 	}
+}
+
+func ExampleGroup_wait() {
+	// Create a Group which will not use a context for cancelation.
+	sg := schedgroup.New(context.Background())
+
+	// Schedule tasks to run in 1, 2, and 3 seconds which will print the number
+	// n to the screen.
+	for i := 0; i < 3; i++ {
+		n := i + 1
+		sg.Delay(time.Duration(n)*100*time.Millisecond, func() error {
+			fmt.Println(n)
+			return nil
+		})
+	}
+
+	// Wait for all of the scheduled tasks to complete.
+	if err := sg.Wait(); err != nil {
+		log.Fatalf("failed to wait: %v", err)
+	}
+
+	// Output:
+	// 1
+	// 2
+	// 3
+}
+
+func ExampleGroup_cancelation() {
+	// Create a Group which will use a context's timeout for cancelation.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	sg := schedgroup.New(ctx)
+
+	// Schedule multiple tasks to occur at different times relative to a point
+	// in time.
+	start := time.Now()
+
+	sg.Schedule(start.Add(100*time.Millisecond), func() error {
+		fmt.Println("hello")
+		return nil
+	})
+
+	sg.Schedule(start.Add(200*time.Millisecond), func() error {
+		fmt.Println("world")
+		return nil
+	})
+
+	// Schedule a task which will not be run before a timeout occurs.
+	sg.Schedule(start.Add(1*time.Second), func() error {
+		// This panic would normally crash the program, but this task will
+		// never be run.
+		panic("this shouldn't happen!")
+	})
+
+	// Wait for task completion or timeout.
+	switch err := sg.Wait(); err {
+	case nil:
+		panic("all tasks should not have completed!")
+	case context.DeadlineExceeded:
+		// No problem, we expected this to occur.
+		fmt.Println("timeout!")
+	default:
+		log.Fatalf("failed to wait: %v", err)
+	}
+
+	// Output:
+	// hello
+	// world
+	// timeout!
 }
 
 func panicf(format string, a ...interface{}) {
