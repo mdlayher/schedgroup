@@ -109,6 +109,34 @@ func TestGroupContextCancelImmediate(t *testing.T) {
 	}
 }
 
+func TestGroupSchedulePast(t *testing.T) {
+	t.Parallel()
+
+	sg := schedgroup.New(context.Background())
+
+	const n = 2
+
+	// Each task will signal on a channel when it is run.
+	sigC := make(chan struct{}, n)
+	signal := func() error {
+		sigC <- struct{}{}
+		return nil
+	}
+
+	// Any negative delay or time in the past will cause the task to be
+	// scheduled immediately.
+	sg.Delay(-1*time.Second, signal)
+	sg.Schedule(time.Now().Add(-1*time.Second), signal)
+
+	if err := sg.Wait(); err != nil {
+		t.Fatalf("failed to wait: %v", err)
+	}
+
+	if diff := cmp.Diff(n, len(sigC)); diff != "" {
+		t.Fatalf("unexpected number of tasks run (-want +got):\n%s", diff)
+	}
+}
+
 func TestGroupScheduledTasksContextCancel(t *testing.T) {
 	t.Parallel()
 
