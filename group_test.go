@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -173,12 +174,13 @@ func TestGroupScheduledTasksDeadlineExceeded(t *testing.T) {
 	}
 }
 
+// This example demonstrates typical use of a Group.
 func ExampleGroup_wait() {
 	// Create a Group which will not use a context for cancelation.
 	sg := schedgroup.New(context.Background())
 
-	// Schedule tasks to run in 1, 2, and 3 seconds which will print the number
-	// n to the screen.
+	// Schedule tasks to run in 100, 200, and 300 milliseconds which will print
+	// the number n to the screen.
 	for i := 0; i < 3; i++ {
 		n := i + 1
 		sg.Delay(time.Duration(n)*100*time.Millisecond, func() error {
@@ -198,6 +200,7 @@ func ExampleGroup_wait() {
 	// 3
 }
 
+// This example demonstrates how context cancelation/timeout effects a Group.
 func ExampleGroup_cancelation() {
 	// Create a Group which will use a context's timeout for cancelation.
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -242,6 +245,50 @@ func ExampleGroup_cancelation() {
 	// timeout!
 }
 
+// This example demonstrates how task errors are handled with a Group.
+func ExampleGroup_errors() {
+	// Create a Group which will not use a context for cancelation.
+	sg := schedgroup.New(context.Background())
+
+	// Suppose we are scheduling network requests and want to be informed if
+	// they succeed or time out.
+	for i := 0; i < 3; i++ {
+		n := i + 1
+		sg.Delay(time.Duration(n)*100*time.Millisecond, func() error {
+			if n == 2 {
+				// Simulate a timeout.
+				return &timeoutError{}
+			}
+
+			fmt.Println(n)
+			return nil
+		})
+	}
+
+	// Wait will wait for all of the scheduled tasks to complete, even if some
+	// of them returned errors.
+	//
+	// We expect a timeout error, and  2 will be missing from the output due
+	// to the timeout.
+	if err := sg.Wait(); err != nil {
+		if nerr, ok := err.(net.Error); !ok || !nerr.Timeout() {
+			log.Fatalf("failed to wait: %v", err)
+		}
+	}
+
+	// Output:
+	// 1
+	// 3
+}
+
 func panicf(format string, a ...interface{}) {
 	panic(fmt.Sprintf(format, a...))
 }
+
+var _ net.Error = &timeoutError{}
+
+type timeoutError struct{}
+
+func (e *timeoutError) Error() string   { return "timeout" }
+func (e *timeoutError) Timeout() bool   { return true }
+func (e *timeoutError) Temporary() bool { return true }
