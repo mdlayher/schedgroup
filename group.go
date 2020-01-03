@@ -77,8 +77,8 @@ func (g *Group) Schedule(when time.Time, fn func() error) {
 // Wait waits for the completion of all scheduled tasks, or for cancelation of
 // the context passed to New.
 func (g *Group) Wait() error {
-	// Tick and wait repeatedly to see if the monitor goroutine has consumed
-	// and processed all of the available work.
+	// Wait on context cancelation or for the number of items in the heap
+	// to reach 0.
 	var n int
 	for {
 		select {
