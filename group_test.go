@@ -100,9 +100,12 @@ func TestGroupContextCancelImmediate(t *testing.T) {
 
 	sg := schedgroup.New(ctx)
 
-	sg.Schedule(time.Now(), func() error {
-		panic("should not be called")
-	})
+	for i := 0; i < 5; i++ {
+		sg.Schedule(time.Now(), func() error {
+			panic("should not be called")
+		})
+		time.Sleep(2 * time.Millisecond)
+	}
 
 	if err := sg.Wait(); err != context.Canceled {
 		t.Fatalf("expected context canceled, but got: %v", err)
@@ -175,7 +178,7 @@ func TestGroupScheduledTasksContextCancel(t *testing.T) {
 	}
 }
 
-func TestGroupScheduledTasksDeadlineExceeded(t *testing.T) {
+func TestGroupWaitContextDeadlineExceeded(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
@@ -200,6 +203,88 @@ func TestGroupScheduledTasksDeadlineExceeded(t *testing.T) {
 	if err := sg.Wait(); err != context.DeadlineExceeded {
 		t.Fatalf("expected deadline exceeded, but got: %v", err)
 	}
+}
+
+func TestGroupWaitNoContext(t *testing.T) {
+	t.Parallel()
+
+	sg := schedgroup.New(context.Background())
+
+	timer := time.AfterFunc(5*time.Second, func() {
+		panic("took too long")
+	})
+	defer timer.Stop()
+
+	// Make sure both tasks complete before Wait unblocks.
+	doneC := make(chan struct{}, 2)
+	done := func() error {
+		doneC <- struct{}{}
+		return nil
+	}
+
+	sg.Schedule(time.Now(), done)
+	sg.Delay(50*time.Millisecond, done)
+
+	// Make sure the first task ran and then expect deadline exceeded.
+	if err := sg.Wait(); err != nil {
+		t.Fatalf("failed to wait: %v", err)
+	}
+
+	<-doneC
+	<-doneC
+}
+
+func TestGroupScheduleAfterWaitPanic(t *testing.T) {
+	t.Parallel()
+
+	sg := schedgroup.New(context.Background())
+	if err := sg.Wait(); err != nil {
+		t.Fatalf("failed to wait: %v", err)
+	}
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("no panic occurred")
+		}
+
+		// Probably better than exporting the message.
+		const want = "schedgroup: attempted to schedule task after Group.Wait was called"
+
+		if diff := cmp.Diff(want, r); diff != "" {
+			t.Fatalf("unexpected panic (-want +got):\n%s", diff)
+		}
+	}()
+
+	sg.Schedule(time.Now(), func() error {
+		panic("should not scheduled")
+	})
+}
+
+func TestGroupDoubleWaitPanic(t *testing.T) {
+	t.Parallel()
+
+	sg := schedgroup.New(context.Background())
+	if err := sg.Wait(); err != nil {
+		t.Fatalf("failed to wait: %v", err)
+	}
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("no panic occurred")
+		}
+
+		// Probably better than exporting the message.
+		const want = "schedgroup: multiple calls to Group.Wait"
+
+		if diff := cmp.Diff(want, r); diff != "" {
+			t.Fatalf("unexpected panic (-want +got):\n%s", diff)
+		}
+	}()
+
+	sg.Wait()
+	panic("wait did not panic")
 }
 
 // This example demonstrates typical use of a Group.
