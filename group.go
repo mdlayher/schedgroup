@@ -177,9 +177,11 @@ func (g *Group) monitor(ctx context.Context) {
 			return
 		case <-g.addC:
 			// A new task was added, check task heap again.
+			//lint:ignore SA4011 intentional break for code coverage
 			break
 		case <-tickC:
 			// An existing task should be ready as of now.
+			//lint:ignore SA4011 intentional break for code coverage
 			break
 		}
 	}
