@@ -287,6 +287,51 @@ func TestGroupDoubleWaitPanic(t *testing.T) {
 	panic("wait did not panic")
 }
 
+func TestGroupScheduleNoTasks(t *testing.T) {
+	t.Parallel()
+
+	// Ensure Groups that schedule no work do not hang, as was previously the
+	// case between monitor and Wait.
+	const n = 8
+	var wg sync.WaitGroup
+	wg.Add(n)
+	defer wg.Wait()
+
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+
+			for j := 0; j < 1024; j++ {
+				sg := schedgroup.New(context.Background())
+				if err := sg.Wait(); err != nil {
+					panicf("failed to wait: %v", err)
+				}
+			}
+		}()
+	}
+}
+
+func TestGroupWaitAfterScheduled(t *testing.T) {
+	t.Parallel()
+
+	sg := schedgroup.New(context.Background())
+
+	// This job should done before Wait can be called due to the signal send
+	// and the sleep.
+	doneC := make(chan struct{}, 2)
+	sg.Schedule(time.Now(), func() error {
+		doneC <- struct{}{}
+		return nil
+	})
+
+	<-doneC
+	time.Sleep(100 * time.Millisecond)
+
+	if err := sg.Wait(); err != nil {
+		t.Fatalf("failed to wait: %v", err)
+	}
+}
+
 // This example demonstrates typical use of a Group.
 func ExampleGroup_wait() {
 	// Create a Group which will not use a context for cancelation.
