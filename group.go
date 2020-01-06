@@ -117,7 +117,9 @@ func (g *Group) Wait() error {
 	// See if the task heap is already empty. If so, we can exit early.
 	g.mu.Lock()
 	if g.tasks.Len() == 0 {
-		defer g.mu.Unlock()
+		// Release the mutex immediately so that any running jobs are able to
+		// complete and send on g.lenC.
+		g.mu.Unlock()
 		g.cancel()
 		return g.eg.Wait()
 	}
