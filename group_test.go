@@ -369,21 +369,23 @@ func ExampleGroup_cancelation() {
 	// in time.
 	start := time.Now()
 
-	sg.Schedule(start.Add(100*time.Millisecond), func() error {
-		fmt.Println("hello")
-		return nil
-	})
-
-	sg.Schedule(start.Add(200*time.Millisecond), func() error {
-		fmt.Println("world")
-		return nil
-	})
-
 	// Schedule a task which will not be run before a timeout occurs.
 	sg.Schedule(start.Add(1*time.Second), func() error {
 		// This panic would normally crash the program, but this task will
 		// never be run.
 		panic("this shouldn't happen!")
+	})
+
+	// Schedule tasks which will occur before timeout. Tasks which are scheduled
+	// for an earlier time will occur first.
+	sg.Schedule(start.Add(200*time.Millisecond), func() error {
+		fmt.Println("world")
+		return nil
+	})
+
+	sg.Schedule(start.Add(100*time.Millisecond), func() error {
+		fmt.Println("hello")
+		return nil
 	})
 
 	// Wait for task completion or timeout.
