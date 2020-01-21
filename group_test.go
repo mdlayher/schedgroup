@@ -37,7 +37,7 @@ func TestGroupScheduling(t *testing.T) {
 	const (
 		n      = 5
 		spread = 100 * time.Millisecond
-		leeway = 5 * time.Millisecond
+		leeway = 10 * time.Millisecond
 	)
 
 	timeC := make(chan time.Time, n)
