@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -54,9 +53,8 @@ func TestGroupScheduling(t *testing.T) {
 
 		// Produce the current time when a task is fired.
 		for i := 0; i < n; i++ {
-			sg.Delay(time.Duration(i+1)*spread, func() error {
+			sg.Delay(time.Duration(i+1)*spread, func() {
 				timeC <- time.Now()
-				return nil
 			})
 		}
 
@@ -101,7 +99,7 @@ func TestGroupContextCancelImmediate(t *testing.T) {
 	sg := schedgroup.New(ctx)
 
 	for i := 0; i < 5; i++ {
-		sg.Schedule(time.Now(), func() error {
+		sg.Schedule(time.Now(), func() {
 			panic("should not be called")
 		})
 		time.Sleep(2 * time.Millisecond)
@@ -121,9 +119,8 @@ func TestGroupSchedulePast(t *testing.T) {
 
 	// Each task will signal on a channel when it is run.
 	sigC := make(chan struct{}, n)
-	signal := func() error {
+	signal := func() {
 		sigC <- struct{}{}
-		return nil
 	}
 
 	// Any negative delay or time in the past will cause the task to be
@@ -153,10 +150,9 @@ func TestGroupScheduledTasksContextCancel(t *testing.T) {
 	waitC := make(chan struct{})
 	var count int32
 	for i := 0; i < 10; i++ {
-		sg.Delay(1*time.Millisecond, func() error {
+		sg.Delay(1*time.Millisecond, func() {
 			waitC <- struct{}{}
 			atomic.AddInt32(&count, 1)
-			return nil
 		})
 
 		// Blocks until closed halfway through. Any further sends will result
@@ -188,13 +184,12 @@ func TestGroupWaitContextDeadlineExceeded(t *testing.T) {
 
 	// This task is scheduled now and should run.
 	doneC := make(chan struct{})
-	sg.Schedule(time.Now(), func() error {
+	sg.Schedule(time.Now(), func() {
 		close(doneC)
-		return nil
 	})
 
 	// This task is delayed and should not run.
-	sg.Delay(1*time.Second, func() error {
+	sg.Delay(1*time.Second, func() {
 		panic("should not be called")
 	})
 
@@ -217,21 +212,20 @@ func TestGroupWaitNoContext(t *testing.T) {
 
 	// Make sure both tasks complete before Wait unblocks.
 	doneC := make(chan struct{}, 2)
-	done := func() error {
+	done := func() {
 		doneC <- struct{}{}
-		return nil
 	}
 
 	sg.Schedule(time.Now(), done)
 	sg.Delay(50*time.Millisecond, done)
 
-	// Make sure the first task ran and then expect deadline exceeded.
+	<-doneC
+	<-doneC
+
 	if err := sg.Wait(); err != nil {
 		t.Fatalf("failed to wait: %v", err)
 	}
 
-	<-doneC
-	<-doneC
 }
 
 func TestGroupScheduleAfterWaitPanic(t *testing.T) {
@@ -256,8 +250,8 @@ func TestGroupScheduleAfterWaitPanic(t *testing.T) {
 		}
 	}()
 
-	sg.Schedule(time.Now(), func() error {
-		panic("should not scheduled")
+	sg.Schedule(time.Now(), func() {
+		panic("should not be scheduled")
 	})
 }
 
@@ -319,9 +313,8 @@ func TestGroupWaitAfterScheduled(t *testing.T) {
 	// This job should done before Wait can be called due to the signal send
 	// and the sleep.
 	doneC := make(chan struct{}, 2)
-	sg.Schedule(time.Now(), func() error {
+	sg.Schedule(time.Now(), func() {
 		doneC <- struct{}{}
-		return nil
 	})
 
 	<-doneC
@@ -341,9 +334,8 @@ func ExampleGroup_wait() {
 	// the number n to the screen.
 	for i := 0; i < 3; i++ {
 		n := i + 1
-		sg.Delay(time.Duration(n)*100*time.Millisecond, func() error {
+		sg.Delay(time.Duration(n)*100*time.Millisecond, func() {
 			fmt.Println(n)
-			return nil
 		})
 	}
 
@@ -370,7 +362,7 @@ func ExampleGroup_cancelation() {
 	start := time.Now()
 
 	// Schedule a task which will not be run before a timeout occurs.
-	sg.Schedule(start.Add(1*time.Second), func() error {
+	sg.Schedule(start.Add(1*time.Second), func() {
 		// This panic would normally crash the program, but this task will
 		// never be run.
 		panic("this shouldn't happen!")
@@ -378,14 +370,12 @@ func ExampleGroup_cancelation() {
 
 	// Schedule tasks which will occur before timeout. Tasks which are scheduled
 	// for an earlier time will occur first.
-	sg.Schedule(start.Add(200*time.Millisecond), func() error {
+	sg.Schedule(start.Add(200*time.Millisecond), func() {
 		fmt.Println("world")
-		return nil
 	})
 
-	sg.Schedule(start.Add(100*time.Millisecond), func() error {
+	sg.Schedule(start.Add(100*time.Millisecond), func() {
 		fmt.Println("hello")
-		return nil
 	})
 
 	// Wait for task completion or timeout.
@@ -405,50 +395,6 @@ func ExampleGroup_cancelation() {
 	// timeout!
 }
 
-// This example demonstrates how task errors are handled with a Group.
-func ExampleGroup_errors() {
-	// Create a Group which will not use a context for cancelation.
-	sg := schedgroup.New(context.Background())
-
-	// Suppose we are scheduling network requests and want to be informed if
-	// they succeed or time out.
-	for i := 0; i < 3; i++ {
-		n := i + 1
-		sg.Delay(time.Duration(n)*100*time.Millisecond, func() error {
-			if n == 2 {
-				// Simulate a timeout.
-				return &timeoutError{}
-			}
-
-			fmt.Println(n)
-			return nil
-		})
-	}
-
-	// Wait will wait for all of the scheduled tasks to complete, even if some
-	// of them returned errors.
-	//
-	// We expect a timeout error, and  2 will be missing from the output due
-	// to the timeout.
-	if err := sg.Wait(); err != nil {
-		if nerr, ok := err.(net.Error); !ok || !nerr.Timeout() {
-			log.Fatalf("failed to wait: %v", err)
-		}
-	}
-
-	// Output:
-	// 1
-	// 3
-}
-
 func panicf(format string, a ...interface{}) {
 	panic(fmt.Sprintf(format, a...))
 }
-
-var _ net.Error = &timeoutError{}
-
-type timeoutError struct{}
-
-func (e *timeoutError) Error() string   { return "timeout" }
-func (e *timeoutError) Timeout() bool   { return true }
-func (e *timeoutError) Temporary() bool { return true }
