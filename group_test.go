@@ -31,12 +31,13 @@ func TestGroupScheduling(t *testing.T) {
 
 	sg := schedgroup.New(context.Background())
 
-	// Schedule N tasks that should be roughly spread duration apart, with a
-	// bit of leeway in each direction.
+	// Schedule N tasks that should be roughly spread duration apart, with a bit
+	// of leeway in each direction. While 10ms leeway worked fine on Linux, we
+	// saw a difference of 64ms in the darwin GitHub Actions runner.
 	const (
 		n      = 5
 		spread = 100 * time.Millisecond
-		leeway = 10 * time.Millisecond
+		leeway = 100 * time.Millisecond
 	)
 
 	timeC := make(chan time.Time, n)
