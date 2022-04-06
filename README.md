@@ -1,4 +1,4 @@
-# schedgroup [![builds.sr.ht status](https://builds.sr.ht/~mdlayher/schedgroup.svg)](https://builds.sr.ht/~mdlayher/schedgroup?) [![GoDoc](https://godoc.org/github.com/mdlayher/schedgroup?status.svg)](https://godoc.org/github.com/mdlayher/schedgroup) [![Go Report Card](https://goreportcard.com/badge/github.com/mdlayher/schedgroup)](https://goreportcard.com/report/github.com/mdlayher/schedgroup)
+# schedgroup [![Test Status](https://github.com/mdlayher/schedgroup/workflows/Test/badge.svg)](https://github.com/mdlayher/schedgroup/actions) [![Go Reference](https://pkg.go.dev/badge/github.com/mdlayher/schedgroup.svg)](https://pkg.go.dev/github.com/mdlayher/schedgroup) [![Go Report Card](https://goreportcard.com/badge/github.com/mdlayher/schedgroup)](https://goreportcard.com/report/github.com/mdlayher/schedgroup)
 
 Package `schedgroup` provides a goroutine worker pool which schedules tasks
 to be performed at or after a specified time. MIT Licensed.
