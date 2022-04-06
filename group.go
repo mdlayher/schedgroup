@@ -18,7 +18,7 @@ import (
 // more tasks.
 type Group struct {
 	// Atomics must come first per sync/atomic.
-	waiting *uint32
+	waiting uint32
 
 	// Context/cancelation support.
 	ctx    context.Context
@@ -41,8 +41,6 @@ func New(ctx context.Context) *Group {
 	mctx, cancel := context.WithCancel(ctx)
 
 	g := &Group{
-		waiting: new(uint32),
-
 		ctx:    ctx,
 		cancel: cancel,
 
@@ -73,7 +71,7 @@ func (g *Group) Delay(delay time.Duration, fn func()) {
 //
 // If Schedule is called after a call to Wait, Schedule will panic.
 func (g *Group) Schedule(when time.Time, fn func()) {
-	if atomic.LoadUint32(g.waiting) != 0 {
+	if atomic.LoadUint32(&g.waiting) != 0 {
 		panic("schedgroup: attempted to schedule task after Group.Wait was called")
 	}
 
@@ -102,7 +100,7 @@ func (g *Group) Schedule(when time.Time, fn func()) {
 // Once Wait is called, any further calls to Delay or Schedule will panic. If
 // Wait is called more than once, Wait will panic.
 func (g *Group) Wait() error {
-	if v := atomic.SwapUint32(g.waiting, 1); v != 0 {
+	if v := atomic.SwapUint32(&g.waiting, 1); v != 0 {
 		panic("schedgroup: multiple calls to Group.Wait")
 	}
 
